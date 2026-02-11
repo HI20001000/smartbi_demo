@@ -1,0 +1,142 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://smartbi-demo/contracts/normalized_request.schema.json",
+  "title": "NormalizedRequest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "request_id",
+    "request_context",
+    "user_context",
+    "query_context",
+    "time_context",
+    "risk_context",
+    "metric_hints",
+    "missing_required_fields"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.0"
+    },
+    "request_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "request_context": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["request_ts", "timezone"],
+      "properties": {
+        "request_ts": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "timezone": {
+          "type": "string",
+          "default": "Asia/Macau"
+        },
+        "channel": {
+          "type": "string",
+          "enum": ["cli", "api", "web", "batch"]
+        }
+      }
+    },
+    "user_context": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["user_id", "role", "data_scope", "allowed_regions"],
+      "properties": {
+        "user_id": {"type": "string", "minLength": 1},
+        "role": {"type": "string", "minLength": 1},
+        "data_scope": {
+          "type": "array",
+          "items": {"type": "string"},
+          "minItems": 1
+        },
+        "allowed_regions": {
+          "type": "array",
+          "items": {"type": "string"}
+        }
+      }
+    },
+    "query_context": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["raw_text", "normalized_text", "language", "intent"],
+      "properties": {
+        "raw_text": {"type": "string", "minLength": 1},
+        "normalized_text": {"type": "string", "minLength": 1},
+        "language": {"type": "string", "enum": ["zh-TW", "zh-CN", "en"]},
+        "intent": {
+          "type": "string",
+          "enum": ["kpi_query", "comparison", "trend", "detail_request", "out_of_scope"]
+        }
+      }
+    },
+    "time_context": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["original_phrase", "resolved"],
+      "properties": {
+        "original_phrase": {"type": ["string", "null"]},
+        "resolved": {
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "required": ["type", "start_date", "end_date"],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "single_date",
+                "date_range",
+                "month_to_date",
+                "year_to_date",
+                "latest_available_date"
+              ]
+            },
+            "start_date": {"type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$"},
+            "end_date": {"type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$"}
+          }
+        }
+      }
+    },
+    "risk_context": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contains_sensitive_terms", "risk_flags"],
+      "properties": {
+        "contains_sensitive_terms": {"type": "boolean"},
+        "risk_flags": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "pii_requested",
+              "account_level_detail_requested",
+              "customer_level_detail_requested",
+              "missing_time_filter",
+              "cross_currency_aggregation_risk"
+            ]
+          }
+        }
+      }
+    },
+    "metric_hints": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "normalization_trace": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "missing_required_fields": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["time_window", "metric", "group_by", "filters"]
+      }
+    }
+  }
+}
