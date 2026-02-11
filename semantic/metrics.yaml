@@ -1,10 +1,43 @@
-version: "0.1"
+version: "0.3"
+
+defaults:
+  owner: "data_semantic_team"
+  timezone: "Asia/Macau"
+  currency_policy:
+    allow_cross_currency_aggregation: false
+    rule_zh: "不同幣別不可直接加總；需先按幣別分組或指定單一幣別。"
 
 metrics:
   deposit_total_end_balance:
+    concept_id: "metric.deposit.total_end_balance"
     name_zh: "存款期末餘額總和"
+    name_en: "Total Deposit End Balance"
+    aliases:
+      - "存款餘額"
+      - "期末餘額"
+      - "deposit balance"
+      - "total deposit balance"
     desc_zh: "按指定日期、分行、幣別彙總存款期末餘額"
+    definition_zh: "統計指定條件下所有存款帳戶在營業日的期末餘額加總。"
     grain: ["biz_date", "branch_id", "currency"]
+    dimensions:
+      required: ["biz_date"]
+      optional: ["branch_id", "branch_name", "region", "currency"]
+    measures: ["total_end_balance"]
+    calc_rule:
+      expression_sql: "SUM(fact_account_balance_daily.end_balance)"
+      include_status: ["ACTIVE", "FROZEN"]
+      exclude_status: ["CLOSED"]
+      null_policy: "NULL end_balance 視為 0，不納入筆數"
+    time_semantics:
+      date_field: "biz_date"
+      calendar_type: "business_date"
+      supports:
+        - "single_date"
+        - "date_range"
+        - "month_to_date"
+        - "year_to_date"
+      default_window: "latest_available_date"
     source:
       preferred: "vw_kpi_deposit_balance_by_branch_date"
       fallback_sql: |
@@ -15,15 +48,96 @@ metrics:
           SUM(b.end_balance) AS total_end_balance
         FROM fact_account_balance_daily b
         JOIN core_account a ON a.account_id = b.account_id
+        WHERE a.status IN ('ACTIVE', 'FROZEN')
         GROUP BY b.biz_date, a.branch_id, a.currency
-    allowed_group_by: ["biz_date", "branch_id", "currency", "region"]
+    filters:
+      allowed:
+        - "biz_date"
+        - "yyyy_mm"
+        - "branch_id"
+        - "region"
+        - "currency"
+      disallowed:
+        - "full_name"
+        - "id_no"
+        - "phone"
+        - "email"
+        - "account_no"
+        - "customer_no"
+    allowed_group_by: ["biz_date", "branch_id", "branch_name", "region", "currency"]
     disallowed_group_by: ["account_id", "account_no", "customer_id", "full_name", "id_no", "phone", "email"]
+    constraints:
+      - "不同幣別不可直接加總，若未指定 currency 必須回傳分幣別結果。"
+      - "僅允許聚合結果，不得回傳帳戶層級明細。"
+    examples:
+      positive:
+        - user_query: "查昨天各分行的存款餘額"
+          expected_group_by: ["biz_date", "branch_id", "currency"]
+        - user_query: "本月到今天，澳門半島存款期末餘額"
+          expected_filters: ["region=澳門半島", "MTD"]
+      negative:
+        - user_query: "給我 account_id=10001 的期末餘額"
+          reason: "違反明細輸出限制"
+        - user_query: "把 MOP 和 HKD 直接合計成總餘額"
+          reason: "違反跨幣別直接加總限制"
 
   txn_volume_by_channel:
+    concept_id: "metric.txn.volume_by_channel"
     name_zh: "渠道交易量"
+    name_en: "Transaction Volume by Channel"
+    aliases:
+      - "交易量"
+      - "渠道交易筆數"
+      - "channel transaction volume"
+      - "txn count by channel"
     desc_zh: "按日期與渠道統計交易筆數與淨額"
+    definition_zh: "統計指定日期範圍內，各渠道的交易筆數與交易金額淨額。"
     grain: ["biz_date", "channel"]
+    dimensions:
+      required: ["biz_date"]
+      optional: ["channel", "txn_type"]
+    measures: ["txn_count", "txn_amount_net"]
+    calc_rule:
+      txn_count_sql: "COUNT(*)"
+      txn_amount_net_sql: "SUM(fact_transaction.amount)"
+      reversal_policy: "amount 已為淨額（沖正已反映）"
+      view_column_mapping:
+        txn_count: "vw_kpi_txn_by_channel_date.txn_cnt"
+        txn_amount_net: "vw_kpi_txn_by_channel_date.net_amount"
+    time_semantics:
+      date_field: "biz_date"
+      calendar_type: "business_date"
+      supports:
+        - "single_date"
+        - "date_range"
+        - "month_to_date"
+      default_window: "latest_available_date"
     source:
       preferred: "vw_kpi_txn_by_channel_date"
-    allowed_group_by: ["biz_date", "channel"]
+      fallback_sql: |
+        SELECT
+          t.biz_date,
+          t.channel,
+          COUNT(*) AS txn_cnt,
+          SUM(t.amount) AS net_amount
+        FROM fact_transaction t
+        GROUP BY t.biz_date, t.channel
+    filters:
+      allowed: ["biz_date", "yyyy_mm", "channel", "txn_type"]
+      disallowed: ["account_id", "account_no", "customer_id", "customer_no", "full_name", "phone", "email"]
+    allowed_group_by: ["biz_date", "channel", "txn_type"]
     disallowed_group_by: ["account_id", "account_no", "customer_id"]
+    constraints:
+      - "僅允許聚合結果，不得回傳交易明細或帳戶識別資訊。"
+      - "若查詢條件缺少日期，需先要求補充時間範圍。"
+    examples:
+      positive:
+        - user_query: "近7天 ATM 與櫃檯交易量"
+          expected_group_by: ["biz_date", "channel"]
+        - user_query: "今天各渠道交易淨額"
+          expected_measures: ["txn_amount_net"]
+      negative:
+        - user_query: "列出今天所有交易ID和金額"
+          reason: "違反明細輸出限制"
+        - user_query: "查客戶A的交易量"
+          reason: "涉及客戶識別層級，不允許"
