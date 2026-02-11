@@ -24,7 +24,7 @@ def run_cli() -> None:
     session_id = "smartbi-cli"
 
     print("=== SmartBI CLI Chat (LangChain + Memory) ===")
-    print("指令：/exit  /reset  /history  /normalize <text>  /normalize-debug <text>")
+    print("指令：/exit  /reset  /history  /normalize <text>")
     print("-------------------------------------------")
 
     while True:
@@ -55,48 +55,36 @@ def run_cli() -> None:
                     role = "AI" if m.type == "ai" else "You"
                     print(f"{i:02d} {role}: {m.content}")
             continue
-
-        text_for_normalize = user_text
-        normalize_only = False
-        debug_normalization = False
-        if user_text.startswith("/normalize-debug "):
-            text_for_normalize = user_text[len("/normalize-debug ") :].strip()
-            normalize_only = True
-            debug_normalization = True
-        elif user_text.startswith("/normalize "):
+        if user_text.startswith("/normalize "):
             text_for_normalize = user_text[len("/normalize ") :].strip()
-            normalize_only = True
             debug_normalization = True
 
-        request_context = {
-            "request_id": f"req-{int(datetime.now().timestamp())}",
-            "request_ts": datetime.now().astimezone().isoformat(),
-            "timezone": "Asia/Macau",
-            "channel": "cli",
-        }
-        user_context = {
-            "user_id": "smartbi-cli-user",
-            "role": "analyst",
-            "data_scope": ["AGGREGATED_ONLY"],
-            "allowed_regions": ["澳門半島", "氹仔", "路氹城", "路環"],
-        }
+            request_context = {
+                "request_id": f"req-{int(datetime.now().timestamp())}",
+                "request_ts": datetime.now().astimezone().isoformat(),
+                "timezone": "Asia/Macau",
+                "channel": "cli",
+            }
+            user_context = {
+                "user_id": "smartbi-cli-user",
+                "role": "analyst",
+                "data_scope": ["AGGREGATED_ONLY"],
+                "allowed_regions": ["澳門半島", "氹仔", "路氹城", "路環"],
+            }
 
-        try:
-            normalized = normalize_input(
-                text_for_normalize,
-                user_context,
-                request_context,
-                debug=debug_normalization,
-                llm_client=llm_completion_client,
-            )
-            print("Normalized>")
-            print(json.dumps(normalized, ensure_ascii=False, indent=2))
-        except NormalizationError as e:
-            print("[normalize error]", str(e))
-            continue
-
-        if normalize_only:
-            continue
+            try:
+                normalized = normalize_input(
+                    text_for_normalize,
+                    user_context,
+                    request_context,
+                    debug=debug_normalization,
+                    llm_client=llm_completion_client,
+                )
+                print("Normalized>")
+                print(json.dumps(normalized, ensure_ascii=False, indent=2))
+            except NormalizationError as e:
+                print("[normalize error]", str(e))
+                continue
 
         try:
             ans = bot.invoke(session_id, user_text)
