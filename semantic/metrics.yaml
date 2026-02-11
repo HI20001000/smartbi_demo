@@ -1,4 +1,4 @@
-version: "0.2"
+version: "0.3"
 
 defaults:
   owner: "data_semantic_team"
@@ -26,7 +26,7 @@ metrics:
     measures: ["total_end_balance"]
     calc_rule:
       expression_sql: "SUM(fact_account_balance_daily.end_balance)"
-      include_status: ["ACTIVE", "DORMANT"]
+      include_status: ["ACTIVE", "FROZEN"]
       exclude_status: ["CLOSED"]
       null_policy: "NULL end_balance 視為 0，不納入筆數"
     time_semantics:
@@ -48,7 +48,7 @@ metrics:
           SUM(b.end_balance) AS total_end_balance
         FROM fact_account_balance_daily b
         JOIN core_account a ON a.account_id = b.account_id
-        WHERE a.status IN ('ACTIVE', 'DORMANT')
+        WHERE a.status IN ('ACTIVE', 'FROZEN')
         GROUP BY b.biz_date, a.branch_id, a.currency
     filters:
       allowed:
@@ -101,6 +101,9 @@ metrics:
       txn_count_sql: "COUNT(*)"
       txn_amount_net_sql: "SUM(fact_transaction.amount)"
       reversal_policy: "amount 已為淨額（沖正已反映）"
+      view_column_mapping:
+        txn_count: "vw_kpi_txn_by_channel_date.txn_cnt"
+        txn_amount_net: "vw_kpi_txn_by_channel_date.net_amount"
     time_semantics:
       date_field: "biz_date"
       calendar_type: "business_date"
@@ -115,8 +118,8 @@ metrics:
         SELECT
           t.biz_date,
           t.channel,
-          COUNT(*) AS txn_count,
-          SUM(t.amount) AS txn_amount_net
+          COUNT(*) AS txn_cnt,
+          SUM(t.amount) AS net_amount
         FROM fact_transaction t
         GROUP BY t.biz_date, t.channel
     filters:
