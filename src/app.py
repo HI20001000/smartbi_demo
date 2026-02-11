@@ -7,8 +7,20 @@ from chat import SmartBIChat
 from src.normalization import NormalizationError, normalize_input
 
 
+def _make_llm_completion_client(bot: SmartBIChat):
+    """Adapt LangChain chat model output to enricher's plain-text completion interface."""
+
+    def _client(prompt: str, timeout: int = 5) -> str:
+        del timeout  # timeout control is model/provider specific for invoke()
+        response = bot.llm.invoke(prompt)
+        return response.content if hasattr(response, "content") else str(response)
+
+    return _client
+
+
 def run_cli() -> None:
     bot = SmartBIChat(load_env=True)
+    llm_completion_client = _make_llm_completion_client(bot)
     session_id = "smartbi-cli"
 
     print("=== SmartBI CLI Chat (LangChain + Memory) ===")
@@ -75,6 +87,7 @@ def run_cli() -> None:
                 user_context,
                 request_context,
                 debug=debug_normalization,
+                llm_client=llm_completion_client,
             )
             print("Normalized>")
             print(json.dumps(normalized, ensure_ascii=False, indent=2))
