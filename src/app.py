@@ -12,7 +12,7 @@ def run_cli() -> None:
     session_id = "smartbi-cli"
 
     print("=== SmartBI CLI Chat (LangChain + Memory) ===")
-    print("指令：/exit  /reset  /history  /normalize <text>")
+    print("指令：/exit  /reset  /history  /normalize <text>  /normalize-debug <text>")
     print("-------------------------------------------")
 
     while True:
@@ -45,8 +45,16 @@ def run_cli() -> None:
             continue
 
         text_for_normalize = user_text
-        if user_text.startswith("/normalize "):
+        normalize_only = False
+        debug_normalization = False
+        if user_text.startswith("/normalize-debug "):
+            text_for_normalize = user_text[len("/normalize-debug ") :].strip()
+            normalize_only = True
+            debug_normalization = True
+        elif user_text.startswith("/normalize "):
             text_for_normalize = user_text[len("/normalize ") :].strip()
+            normalize_only = True
+            debug_normalization = True
 
         request_context = {
             "request_id": f"req-{int(datetime.now().timestamp())}",
@@ -62,14 +70,19 @@ def run_cli() -> None:
         }
 
         try:
-            normalized = normalize_input(text_for_normalize, user_context, request_context)
+            normalized = normalize_input(
+                text_for_normalize,
+                user_context,
+                request_context,
+                debug=debug_normalization,
+            )
             print("Normalized>")
             print(json.dumps(normalized, ensure_ascii=False, indent=2))
         except NormalizationError as e:
             print("[normalize error]", str(e))
             continue
 
-        if user_text.startswith("/normalize "):
+        if normalize_only:
             continue
 
         try:
