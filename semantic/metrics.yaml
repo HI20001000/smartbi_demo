@@ -1,0 +1,29 @@
+version: "0.1"
+
+metrics:
+  deposit_total_end_balance:
+    name_zh: "存款期末餘額總和"
+    desc_zh: "按指定日期、分行、幣別彙總存款期末餘額"
+    grain: ["biz_date", "branch_id", "currency"]
+    source:
+      preferred: "vw_kpi_deposit_balance_by_branch_date"
+      fallback_sql: |
+        SELECT
+          b.biz_date,
+          a.branch_id,
+          a.currency,
+          SUM(b.end_balance) AS total_end_balance
+        FROM fact_account_balance_daily b
+        JOIN core_account a ON a.account_id = b.account_id
+        GROUP BY b.biz_date, a.branch_id, a.currency
+    allowed_group_by: ["biz_date", "branch_id", "currency", "region"]
+    disallowed_group_by: ["account_id", "account_no", "customer_id", "full_name", "id_no", "phone", "email"]
+
+  txn_volume_by_channel:
+    name_zh: "渠道交易量"
+    desc_zh: "按日期與渠道統計交易筆數與淨額"
+    grain: ["biz_date", "channel"]
+    source:
+      preferred: "vw_kpi_txn_by_channel_date"
+    allowed_group_by: ["biz_date", "channel"]
+    disallowed_group_by: ["account_id", "account_no", "customer_id"]

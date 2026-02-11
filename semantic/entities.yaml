@@ -1,0 +1,101 @@
+version: "0.1"
+dialect: "mysql8"
+database: "smartbi_demo"
+
+sensitivity_levels:
+  PII:
+    rule: "永不輸出明細；僅允許聚合後、去識別結果"
+  CONFIDENTIAL:
+    rule: "只允許聚合/統計層級輸出；不可回傳可重識別資訊"
+  INTERNAL:
+    rule: "可用於 SQL 與解釋"
+  PUBLIC:
+    rule: "可自由輸出"
+
+tables:
+  dim_branch:
+    desc_zh: "分行維度"
+    pk: ["branch_id"]
+    columns:
+      branch_id:   {type: "INT",     sensitivity: "PUBLIC",  desc_zh: "分行ID"}
+      branch_code: {type: "VARCHAR", sensitivity: "INTERNAL", desc_zh: "分行代碼"}
+      branch_name: {type: "VARCHAR", sensitivity: "PUBLIC",  desc_zh: "分行名稱"}
+      region:      {type: "VARCHAR", sensitivity: "PUBLIC",  desc_zh: "區域（澳門半島/氹仔/路氹城/路環）"}
+      city:        {type: "VARCHAR", sensitivity: "PUBLIC",  desc_zh: "城市"}
+      opened_date: {type: "DATE",    sensitivity: "INTERNAL", desc_zh: "開業日期"}
+
+  dim_calendar:
+    desc_zh: "營業日曆維度"
+    pk: ["biz_date"]
+    columns:
+      biz_date:     {type: "DATE", sensitivity: "PUBLIC", desc_zh: "營業日"}
+      year:         {type: "INT",  sensitivity: "PUBLIC", desc_zh: "年"}
+      month:        {type: "INT",  sensitivity: "PUBLIC", desc_zh: "月"}
+      yyyy_mm:      {type: "CHAR", sensitivity: "PUBLIC", desc_zh: "YYYY-MM"}
+      is_month_end: {type: "TINYINT", sensitivity: "PUBLIC", desc_zh: "是否月末"}
+
+  core_customer:
+    desc_zh: "客戶主檔（含 PII，僅供 join，不允許明細輸出）"
+    pk: ["customer_id"]
+    columns:
+      customer_id: {type: "BIGINT", sensitivity: "INTERNAL", desc_zh: "客戶ID"}
+      customer_no: {type: "VARCHAR", sensitivity: "CONFIDENTIAL", desc_zh: "客戶編號（識別性高）"}
+      full_name:   {type: "VARCHAR", sensitivity: "PII", desc_zh: "姓名"}
+      id_no:       {type: "VARCHAR", sensitivity: "PII", desc_zh: "證件號（假資料）"}
+      phone:       {type: "VARCHAR", sensitivity: "PII", desc_zh: "電話"}
+      email:       {type: "VARCHAR", sensitivity: "PII", desc_zh: "Email"}
+      birth_date:  {type: "DATE", sensitivity: "PII", desc_zh: "出生日期"}
+      gender:      {type: "ENUM", sensitivity: "CONFIDENTIAL", desc_zh: "性別"}
+      risk_level:  {type: "ENUM", sensitivity: "INTERNAL", desc_zh: "風險等級"}
+      kyc_status:  {type: "ENUM", sensitivity: "INTERNAL", desc_zh: "KYC 狀態"}
+
+  core_account:
+    desc_zh: "存款帳戶主檔"
+    pk: ["account_id"]
+    fks:
+      customer_id: {ref: "core_customer.customer_id"}
+      branch_id:   {ref: "dim_branch.branch_id"}
+      product_id:  {ref: "dim_product.product_id"}
+    columns:
+      account_id: {type: "BIGINT", sensitivity: "INTERNAL", desc_zh: "帳戶ID"}
+      account_no: {type: "VARCHAR", sensitivity: "CONFIDENTIAL", desc_zh: "帳號（識別性高）"}
+      customer_id:{type: "BIGINT", sensitivity: "INTERNAL", desc_zh: "客戶ID"}
+      branch_id:  {type: "INT", sensitivity: "PUBLIC", desc_zh: "分行ID"}
+      product_id: {type: "INT", sensitivity: "PUBLIC", desc_zh: "產品ID"}
+      currency:   {type: "CHAR", sensitivity: "PUBLIC", desc_zh: "幣別（MOP/HKD）"}
+      status:     {type: "ENUM", sensitivity: "INTERNAL", desc_zh: "帳戶狀態"}
+
+  fact_account_balance_daily:
+    desc_zh: "存款帳戶每日餘額快照（核心 KPI 來源）"
+    pk: ["biz_date", "account_id"]
+    fks:
+      account_id: {ref: "core_account.account_id"}
+      biz_date:   {ref: "dim_calendar.biz_date"}
+    columns:
+      biz_date:      {type: "DATE", sensitivity: "PUBLIC", desc_zh: "營業日"}
+      account_id:    {type: "BIGINT", sensitivity: "INTERNAL", desc_zh: "帳戶ID"}
+      end_balance:   {type: "DECIMAL", sensitivity: "CONFIDENTIAL", desc_zh: "期末餘額"}
+      available_bal: {type: "DECIMAL", sensitivity: "CONFIDENTIAL", desc_zh: "可用餘額"}
+      hold_amount:   {type: "DECIMAL", sensitivity: "CONFIDENTIAL", desc_zh: "凍結/保留金額"}
+
+  fact_transaction:
+    desc_zh: "交易明細（高風險明細，不允許輸出帳戶層級明細）"
+    pk: ["txn_id"]
+    fks:
+      account_id: {ref: "core_account.account_id"}
+      biz_date:   {ref: "dim_calendar.biz_date"}
+    columns:
+      txn_id:     {type: "BIGINT", sensitivity: "INTERNAL", desc_zh: "交易ID"}
+      biz_date:   {type: "DATE", sensitivity: "PUBLIC", desc_zh: "營業日"}
+      account_id: {type: "BIGINT", sensitivity: "INTERNAL", desc_zh: "帳戶ID"}
+      txn_type:   {type: "ENUM", sensitivity: "PUBLIC", desc_zh: "交易類型"}
+      channel:    {type: "ENUM", sensitivity: "PUBLIC", desc_zh: "渠道"}
+      amount:     {type: "DECIMAL", sensitivity: "CONFIDENTIAL", desc_zh: "交易金額（淨額）"}
+      counterparty:{type: "VARCHAR", sensitivity: "CONFIDENTIAL", desc_zh: "對手方（可能敏感）"}
+
+views:
+  vw_kpi_deposit_balance_by_branch_date:
+    desc_zh: "分行/日期 存款餘額 KPI（已聚合）"
+    safe_output: true
+    allowed_dims: ["biz_date", "branch_id", "branch_name", "region", "currency"]
+    measures: ["total_end_balance", "total_available_bal", "total_hold_amount", "accounts_cnt"]
