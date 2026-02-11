@@ -7,6 +7,7 @@ from typing import Any, Dict, Optional
 from .llm_enricher import enrich_draft
 from .rule_engine import build_normalized_request
 from .validator import validate_normalized_request
+from .llm_enricher import enrich_draft
 
 
 class NormalizationError(Exception):
